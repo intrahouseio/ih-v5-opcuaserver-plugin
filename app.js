@@ -22,144 +22,79 @@ module.exports = async function (plugin) {
   const objectsFolder = addressSpace.rootFolder.objects;
 
 
-  // declare a new object
+  // declare a new objects
   const devicesNode = namespace.addFolder(objectsFolder, { browseName: "Devices" });
   const locationNode = namespace.addFolder(objectsFolder, { browseName: "Location" });
   const tagNode = namespace.addFolder(objectsFolder, { browseName: "Tag" });
 
+
+  addOpcDevices(filter.devicesarr, devicesNode);
+  addOpcDevices(filter.tagarr, tagNode);
+  addOpcDevices(filter.locationarr, locationNode);
  
-  addOpcDevices(namespace);
-  /*
-  // add some variables
-  // add a variable named MyVariable1 to the newly created folder "MyDevice"
-  let variable1 = 1;
-
-  // emulate variable1 changing every 500 ms
-  setInterval(() => {
-    variable1 += 1;
-  }, 500);
-
-  namespace.addVariable({
-    componentOf: device,
-    browseName: "MyVariable1",
-    dataType: "Double",
-    value: {
-      get: () => new Variant({ dataType: DataType.Double, value: variable1 })
-    }
-  });
-
-  // add a variable named MyVariable2 to the newly created folder "MyDevice"
-  let variable2 = 10.0;
-
-  namespace.addVariable({
-    componentOf: device,
-    nodeId: "ns=1;b=1020FFAA", // some opaque NodeId in namespace 4
-    browseName: "MyVariable2",
-    dataType: "Double",
-    minimumSamplingInterval: 1234, // we need to specify a minimumSamplingInterval when using a getter
-    value: {
-      get: () => new Variant({ dataType: DataType.Double, value: variable2 }),
-      set: (variant) => {
-        variable2 = parseFloat(variant.value);
-        return StatusCodes.Good;
-      }
-    }
-  });
-  const os = require("os");
-
-  function available_memory() {
-    // var value = process.memoryUsage().heapUsed / 1000000;
-    const percentageMemUsed = (os.freemem() / os.totalmem()) * 100.0;
-    return percentageMemUsed;
-  }
-  namespace.addVariable({
-    componentOf: device,
-
-    nodeId: "s=free_memory", // a string nodeID
-    browseName: "FreeMemory",
-    dataType: "Double",
-    value: {
-      get: () => new Variant({ dataType: DataType.Double, value: available_memory() })
-    }
-  });
-  */
-
   subExtraChannels(filter);
 
-  function addOpcDevices(namespace) {
-    
-    filter.devicesarr.forEach(item => {
+  function addOpcDevices(arr, node) {
+
+    arr.forEach(item => {
       const device = namespace.addObject({
-        organizedBy: devicesNode,
+        organizedBy: node,
         browseName: item.dn,
-        displayName: item.name
+        displayName: item.name + " (" + item.dn + ")"
       });
-
-      for (const property in item.props) {
-        if (item.props[property].op == 'calc' || item.props[property].op == 'par' || item.props[property].op == 'rw') {
-          let dataType = {};
-          let valueProp;
-          if (item.props[property].vtype == 'N') { dataType.s = 'Double'; dataType.obj = DataType.Double; }
-          if (item.props[property].vtype == 'S') { dataType.s = 'String'; dataType.obj = DataType.String; }
-          if (item.props[property].vtype == 'B') { dataType.s = 'Boolean'; dataType.obj = DataType.Boolean; }
-          plugin.log("devices " + util.inspect(filter, null, 4));
-          if (dataType.s == 'Boolean') {
-            valueProp = filter.devices[item._id + "." + property].value == 1 ? true : false;
-          } else {
-            valueProp = filter.devices[item._id + "." + property].value
-          }
-          plugin.log("valueProp " + util.inspect(filter.devices[item._id + "." + property].value, null, 4));
-          namespace.addVariable({
-            componentOf: device,
-            browseName: property,
-            dataType: dataType.s,
-            value: {
-              get: () => new Variant({ dataType: dataType.obj, value: dataType.s == 'Boolean' ? filter.devices[item._id + "." + property].value == 1 ? true : false : filter.devices[item._id + "." + property].value }),
-              set: (variant) => {
-                if (variant.dataType == 1) {
-                  filter.devices[item._id + "." + property].value = variant.value == true ? 1 : 0;
+        for (const property in item.props) {
+          if (item.props[property].op == 'calc' || item.props[property].op == 'par' || item.props[property].op == 'rw' || item.props[property].op == 'evnt') {
+            let dataType = {};
+            if (item.props[property].vtype == 'N') { dataType.s = 'Double'; dataType.obj = DataType.Double; }
+            if (item.props[property].vtype == 'S') { dataType.s = 'String'; dataType.obj = DataType.String; }
+            if (item.props[property].vtype == 'B') { dataType.s = 'Boolean'; dataType.obj = DataType.Boolean; }
+            namespace.addVariable({
+              componentOf: device,
+              browseName: property + " (" + item.dn + ")",
+              dataType: dataType.s,
+              description: item.props[property].name,
+              value: {
+                get: () => new Variant({ dataType: dataType.obj, value: dataType.s == 'Boolean' ? filter.devices[item._id + "." + property].value == 1 ? true : false : filter.devices[item._id + "." + property].value }),
+                set: (variant) => {
+                  if (variant.dataType == 1) {
+                    filter.devices[item._id + "." + property].value = variant.value == true ? 1 : 0;
+                  }
+                  if (variant.dataType == 11) {
+                    filter.devices[item._id + "." + property].value = parseFloat(variant.value);
+                  }
+                  if (variant.dataType == 12) {
+                    filter.devices[item._id + "." + property].value = String(variant.value);
+                  }
+                  plugin.send({ type: 'command', command: 'setval', did: item._id, prop: property, value: filter.devices[item._id + "." + property].value });
+                  return StatusCodes.Good;
                 }
-                if (variant.dataType == 11) {
-                  filter.devices[item._id + "." + property].value = parseFloat(variant.value);
-                }
-                if (variant.dataType == 12) {
-                  filter.devices[item._id + "." + property].value = String(variant.value);
-                }
-                plugin.send({ type: 'command', command: 'setval', did: item._id, prop: property, value: filter.devices[item._id + "." + property].value });
-                return StatusCodes.Good;
               }
-            }
-          });
-        }
-
-      }
-
+            });
+          }
+        }     
     })
-
-
-
   }
 
+  
   function subExtraChannels(filter) {
     plugin.onSub('devices', filter, data => {
       plugin.log("data" + util.inspect(data), 2);
       data.forEach(item => {
-        
         if (filter.devices[item.did + '.' + item.prop] != undefined) {
           filter.devices[item.did + '.' + item.prop].value = item.value;
-        } 
-        //if (filter.location[item.did + '.' + item.prop] != undefined) filter.location[item.did + '.' + item.prop].value = item.value;
-        //if (filter.tag[item.did + '.' + item.prop] != undefined) filter.tag[item.did + '.' + item.prop].value = item.value;
-      });
-      
+        }      
+       });
     })
   }
 
   plugin.onChange('extra', async (recs) => {
     plugin.log('onChange addExtra ' + util.inspect(recs), 2);
-    extraChannels = await plugin.extra.get();
+    /*extraChannels = await plugin.extra.get();
     filter = filterExtraChannels(extraChannels)
     subExtraChannels(filter);
+    addOpcDevices(filter.devicesarr, devicesNode);
+    addOpcDevices(filter.tagarr, tagNode);
+    addOpcDevices(filter.locationarr, locationNode);*/
   });
 
   server.start(function () {
@@ -183,21 +118,43 @@ module.exports = async function (plugin) {
   }
 
   async function filterExtraChannels(channels) {
-    let res = { did_prop: [] };
+    let res = {
+      did_prop: [],
+      devices: {},
+      devicesarr: [],
+      locationarr: [],
+      tagarr: []
+    };
+    
     const groupchannels = groupBy(channels, 'filter');
     for (const element in groupchannels) {
+      let curdevices = [];
       if (element == 'device') {
         const devices = await plugin.devices.get({ did: groupchannels[element].didarr });
         plugin.log("devices " + util.inspect(devices, null, 4));
-        res.devices = {};
         res.devicesarr = devices;
-        devices.forEach(item => {
-          for (const property in item.props) {
-            res.did_prop.push(item._id + "." + property);
-            res.devices[item._id + "." + property] = item.props[property];
-          }
-        })
+        curdevices.push(...devices);
       }
+      if (element == 'location') {
+        for (let i = 0; i < groupchannels[element].ref.length; i++) {
+          const devices = await plugin.devices.get({ location: groupchannels[element].ref[i].locationStr });
+          res.locationarr.push(...devices);
+          curdevices.push(...devices);
+        }
+      }
+      if (element == 'tag') {
+        for (let i = 0; i < groupchannels[element].ref.length; i++) {
+          const devices = await plugin.devices.get({ tag: groupchannels[element].ref[i].tagStr });
+          res.tagarr.push(...devices);
+          curdevices.push(...devices);          
+        }
+      }
+      curdevices.forEach(item => {
+        for (const property in item.props) {
+          res.did_prop.push(item._id + "." + property);
+          res.devices[item._id + "." + property] = item.props[property];
+        }
+      })
     }
     return res
   }
