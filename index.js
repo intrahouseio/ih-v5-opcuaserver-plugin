@@ -1,6 +1,4 @@
 const util = require("util");
-
-//const plugin = require("ih-plugin-api")();
 const opcua_server = require("./app");
 
 (async () => {  
@@ -10,22 +8,22 @@ const opcua_server = require("./app");
     const opt = getOptFromArgs();
     const pluginapi = opt && opt.pluginapi ? opt.pluginapi : 'ih-plugin-api';
     plugin = require(pluginapi+'/index.js')();
-    plugin.log("OPCUA server plugin has started.");
+    plugin.log("OPCUA server plugin has started.", 1);
     plugin.params = await plugin.params.get();
     plugin.log('Received params '+ util.inspect(plugin.params));
      // Получить каналы для публикации
      plugin.extraChannels = await plugin.extra.get();
-     plugin.log('Received extra channels...');
+     plugin.log('Received extra channels...', 1);
     if (plugin.extraChannels.length > 0) {
-      plugin.log(`Received ${plugin.extraChannels.length} extra channels...`);
+      plugin.log(`Received ${plugin.extraChannels.length} extra channels...`, 1);
     } else {
-      plugin.log('Empty extra channels list!');
+      plugin.log('Empty extra channels list!', 1);
       process.exit(2);
     }
 
     await opcua_server(plugin);
   } catch (err) {
-    plugin.exit(8, `Error! Message: ${util.inspect(err)}`);
+    plugin.exit(8, `Error! Message: ${util.inspect(err)}`, 1);
   }
 })();
 
