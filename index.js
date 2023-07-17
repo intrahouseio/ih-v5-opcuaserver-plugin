@@ -13,7 +13,7 @@ const opcua_server = require("./app");
     plugin.log('Received params '+ util.inspect(plugin.params));
      // Получить каналы для публикации
      plugin.extraChannels = await plugin.extra.get();
-     plugin.log('Received extra channels...', 1);
+     plugin.log('Received extra channels ' + util.inspect(plugin.extraChannels, null, 4), 1);
     if (plugin.extraChannels.length > 0) {
       plugin.log(`Received ${plugin.extraChannels.length} extra channels...`, 1);
     } else {

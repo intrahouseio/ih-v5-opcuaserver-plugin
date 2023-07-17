@@ -20,6 +20,26 @@
       "title": "$port",
       "type": "input",
       "default": "4334"
+    },
+    {
+      "prop": "use_password",
+      "title": "$use_password",
+      "type": "cb",
+      "default": 0
+    },
+    {
+      "prop": "userName",
+      "title": "$userName",
+      "type": "input",
+      "default": "admin",
+      "hide": "!data.p1.use_password"
+    },
+    {
+      "prop": "password",
+      "title": "$password",
+      "type": "password",
+      "default": "password",
+      "hide": "!data.p1.use_password"
     }
     
     

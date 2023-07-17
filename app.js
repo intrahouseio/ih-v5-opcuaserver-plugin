@@ -11,9 +11,17 @@ module.exports = async function (plugin) {
   })
   let extraChannels = await plugin.extra.get();
   let filter = await filterExtraChannels(extraChannels);
-  
-  plugin.log("locationsObj " + util.inspect(locationsObj, null, 4));
+  const userManager = {
+    isValidUser: function (userName, password) {
+      if (userName === params.userName && password === params.password) {
+        return true;
+      }
+      return false;
+    }
+  };
+
   const server = new OPCUAServer({
+    userManager: params.use_password == 1 ? userManager : {},
     port: parseInt(params.port) || 4334, // the port of the listening socket of the server
     resourcePath: params.sourcepath || "/UA/IntraServer", // this path will be added to the endpoint resource name
     buildInfo: {
@@ -23,7 +31,6 @@ module.exports = async function (plugin) {
     }
   });
   await server.initialize();
-  plugin.log("initialized");
   const addressSpace = server.engine.addressSpace;
   const namespace = addressSpace.getOwnNamespace();
   const objectsFolder = addressSpace.rootFolder.objects;
@@ -38,13 +45,14 @@ module.exports = async function (plugin) {
   addOpcDevices(filter.devicesobj);
   subExtraChannels(filter);
 
+  plugin.log("filter " + util.inspect(filter, null, 4))
+
   function addOpcLocation(locationobj) {
-    plugin.log('locationobj = ' + util.inspect(locationobj, null, 4));
     if (locationobj != undefined) {
       for (const prop in locationobj) {
         let maxDepth = 1;
         const locationArr = Object.keys(locationobj[prop]).sort();
-        
+        plugin.log("locationArr " + util.inspect(locationArr, null, 4))
         locationArr.forEach(location => {
           let depth = getDepth(location);
           locationobj[prop][location].depth = depth;
@@ -58,7 +66,6 @@ module.exports = async function (plugin) {
             xloc = parentLocation;
           }
         });
-        plugin.log('1 locationobj[prop] = ' + util.inspect(locationobj[prop], null, 4));
 
         for (let i = 1; i <= maxDepth; i++) {
           Object.keys(locationobj[prop]).forEach(location => {
@@ -68,23 +75,20 @@ module.exports = async function (plugin) {
                 parentNode = locationNode;
               } else {
                 const parentLocation = getParentLocation(location);
+                plugin.log("group " + util.inspect(parentLocation, null, 4))
                 parentNode = locationobj[prop][parentLocation].node;
               }
+              
               const curNode = namespace.addFolder(parentNode, {
                 browseName: locationsObj[location],
                 nodeId: "s=" + location
               });
-
+              filter.folders[location] = curNode;
               // в элемент locationobj добавить ссылку на добавленный folder: { ref: [ ], depth: 1, node:<curNode>  },
               // Нужно будет на следующем уровне
               locationobj[prop][location].node = curNode;
-              plugin.log('Before add opObjects = ' + util.inspect(location, null, 4));
-              plugin.log('Before add opObjects ref = ' + util.inspect(locationobj[prop][location].ref, null, 4));
-              plugin.log('Before add opObjects node = ' + util.inspect(curNode, null, 4));
               // Если есть устройства - их добавить
               if (locationobj[prop][location].ref) addOpcObjects(locationobj[prop][location].ref, curNode, location);
-
-              plugin.log("After add opObjects "  + location)
             }
           });
         }
@@ -93,7 +97,7 @@ module.exports = async function (plugin) {
   }
 
   function addOpcDevices(devicesobj) {
-    if (devicesobj != undefined) {
+    if (devicesobj.Devices != undefined) {
       addOpcObjects(devicesobj.Devices, devicesNode, "Devices");
     }
   }
@@ -105,7 +109,8 @@ module.exports = async function (plugin) {
           browseName: prop,
           nodeId: "s=" + prop
         });
-        addOpcObjects(tagobj[prop], curNode, prop);
+        filter.folders[prop] = curNode;
+        addOpcObjects(tagobj[prop], curNode, prop); 
       }
     }
   }
@@ -118,6 +123,7 @@ module.exports = async function (plugin) {
         browseName: item.dn,
         displayName: item.name + " (" + item.dn + ")"
       });
+      filter.devices[item._id] = device;
       for (const property in item.props) {
         if (item.props[property].op == 'calc' || item.props[property].op == 'par' || item.props[property].op == 'rw' || item.props[property].op == 'evnt') {
           let dataType = {};
@@ -186,46 +192,125 @@ module.exports = async function (plugin) {
       devices: {},
       locationobj: {},
       tagobj: {},
-      deviceobj: {}
+      devicesobj: {}
     }
-    let curdevices = [];
     for (let index = 0; index < recs.length; index++) {
       if (recs[index].op == 'add') {
         if (recs[index].filter == 'location') {
           const location = recs[index].locationStr
-          const devices = await plugin.devices.get({ location: location});
+          const devices = await plugin.devices.get({ location: location });
           const group = groupBy(devices, 'location');
           curfilter.locationobj[location] = group;
-          curdevices.push(...devices);          
+          devices.forEach(item => {
+            for (const property in item.props) {
+              curfilter.did_prop.push(item._id + "." + property);
+              filter.did_prop.push(item._id + "." + property);
+              curfilter.devices[item._id + "." + property] = item.props[property];
+              filter.devices[item._id + "." + property] = item.props[property];
+            }
+          })
           addOpcLocation(curfilter.locationobj);
         }
-
-        curdevices.forEach(item => {
-          for (const property in item.props) {
-            curfilter.did_prop.push(item._id + "." + property);
-            curfilter.devices[item._id + "." + property] = item.props[property];
-          }
-        })
-        subExtraChannels(curfilter);
+        if (recs[index].filter == 'tag') {
+          const tag = recs[index].tagStr;
+          const devices = await plugin.devices.get({ tag: tag });
+          curfilter.tagobj[tag] = [];
+          filter.tagobj[tag] = [];
+          filter.tagobj[tag].push(...devices);
+          curfilter.tagobj[tag].push(...devices);
+          devices.forEach(item => {
+            for (const property in item.props) {
+              curfilter.did_prop.push(item._id + "." + property);
+              filter.did_prop.push(item._id + "." + property);
+              curfilter.devices[item._id + "." + property] = item.props[property];
+              filter.devices[item._id + "." + property] = item.props[property];
+            }
+          })
+          addOpcTag(curfilter.tagobj);
+        }
+        if (recs[index].filter == 'device') {
+          const did = recs[index].did;
+          const devices = await plugin.devices.get({ did: [did] });
+          curfilter.devicesobj["Devices"] = devices;
+          filter.devicesobj["Devices"] = devices;
+          devices.forEach(item => {
+            for (const property in item.props) {
+              curfilter.did_prop.push(item._id + "." + property);
+              filter.did_prop.push(item._id + "." + property);
+              curfilter.devices[item._id + "." + property] = item.props[property];
+              filter.devices[item._id + "." + property] = item.props[property];
+            }
+          })
+          addOpcDevices(curfilter.devicesobj);
+        }
         
       }
-    }
-    //plugin.log('filter ' + util.inspect(filter.locationobj, null, 4));
-    //const addExtra = filterExtraChannels(recs);
-    /*for (const prop in filter.locationobj) { 
-      for (const prop1 in filter.locationobj[prop]) { 
-        plugin.log('NodeId ' + filter.locationobj[prop][prop1])
-      
+      if (recs[index].op == 'delete') {
+        if (recs[index].filter == 'location') {
+          const location = recs[index].locationStr+"/";
+          if (filter.folders[location] != undefined) namespace.deleteNode(filter.folders[location]);
+        }
+        if (recs[index].filter == 'tag') {
+          const tag = recs[index].tagStr;
+          if (filter.folders[tag] != undefined) namespace.deleteNode(filter.folders[tag]);
+        }
+        if (recs[index].filter == 'device') {
+          namespace.deleteNode(filter.devices[recs[index].did]);
+        }
       }
-      
-    }*/
-    //namespace.deleteNode(devicesNode);
-
-
-    //filter = await filterExtraChannels(extraChannels);
-
-
-//    subExtraChannels(filter);
+      if (recs[index].op == 'update') {
+        if (recs[index].filter == 'device') {
+          if (filter.devices[recs[index].did] != undefined) namespace.deleteNode(filter.devices[recs[index].did]);          
+          const devices = await plugin.devices.get({ did: [recs[index]['$set'].did] });
+          curfilter.devicesobj["Devices"] = devices;
+          filter.devicesobj["Devices"] = devices;
+          devices.forEach(item => {
+            for (const property in item.props) {
+              curfilter.did_prop.push(item._id + "." + property);
+              filter.did_prop.push(item._id + "." + property);
+              curfilter.devices[item._id + "." + property] = item.props[property];
+              filter.devices[item._id + "." + property] = item.props[property];
+            }
+          })
+          addOpcDevices(curfilter.devicesobj);
+        }
+        if (recs[index].filter == 'tag') {
+          const tag = recs[index].tagStr;
+          if (filter.folders[tag] != undefined) namespace.deleteNode(filter.folders[tag]);
+          const devices = await plugin.devices.get({ tag: recs[index]["$set"].tagStr });
+          curfilter.tagobj[tag] = [];
+          filter.tagobj[tag] = [];
+          filter.tagobj[tag].push(...devices);
+          curfilter.tagobj[tag].push(...devices);
+          devices.forEach(item => {
+            for (const property in item.props) {
+              curfilter.did_prop.push(item._id + "." + property);
+              filter.did_prop.push(item._id + "." + property);
+              curfilter.devices[item._id + "." + property] = item.props[property];
+              filter.devices[item._id + "." + property] = item.props[property];
+            }
+          })
+          addOpcTag(curfilter.tagobj);
+        }
+        if (recs[index].filter == 'location') {
+          const location = recs[index].locationStr+"/";
+          if (filter.folders[location] != undefined) namespace.deleteNode(filter.folders[location]);
+          const devices = await plugin.devices.get({ location: recs[index]["$set"].locationStr });
+          const group = groupBy(devices, 'location');
+          curfilter.locationobj[location] = group;
+          devices.forEach(item => {
+            for (const property in item.props) {
+              curfilter.did_prop.push(item._id + "." + property);
+              filter.did_prop.push(item._id + "." + property);
+              curfilter.devices[item._id + "." + property] = item.props[property];
+              filter.devices[item._id + "." + property] = item.props[property];
+            }
+          })
+          addOpcLocation(curfilter.locationobj);
+        }
+      }
+    }
+    subExtraChannels(curfilter);
   });
 
   server.start(function () {
@@ -252,6 +337,7 @@ module.exports = async function (plugin) {
     let res = {
       did_prop: [],
       devices: {},
+      folders: {},
       devicesobj: {},
       locationobj: {},
       tagobj: {}
@@ -268,8 +354,9 @@ module.exports = async function (plugin) {
       if (element == 'location') {
         for (let i = 0; i < groupchannels[element].ref.length; i++) {
           const location = groupchannels[element].ref[i].locationStr
-          const devices = await plugin.devices.get({ location: location });
+          const devices = await plugin.devices.get({ location: location });          
           const group = groupBy(devices, 'location');
+          plugin.log("group " + util.inspect(group, null, 4));
           res.locationobj[location] = group;
           curdevices.push(...devices);
         }
@@ -290,7 +377,6 @@ module.exports = async function (plugin) {
         }
       })
     }
-    //plugin.log(" res " + util.inspect(res, null, 4));
     return res
   }
 
