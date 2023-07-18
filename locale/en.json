@@ -28,5 +28,9 @@
     "extype" : "Extension property",
     "pub" : "Publish value",
     "cmd" : "Recieve command",
-    "set" : "Recieve value"
+    "set" : "Recieve value",
+    "sourcePath": "Source path",
+    "filter": "Filter",
+    "tagStr": "Tag String",
+    "locationStr" : "Location String"
 }

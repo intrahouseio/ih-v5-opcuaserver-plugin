@@ -11,7 +11,7 @@
   "p1": [
     {
       "prop": "sourcepath",
-      "title": "SourcePath",
+      "title": "$sourcePath",
       "type": "input",
       "data": "/UA/IntraServer"
     },

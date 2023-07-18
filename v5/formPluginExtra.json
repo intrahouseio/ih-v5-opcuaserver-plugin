@@ -20,7 +20,7 @@
       "columns": [
         {
           "prop": "filter",
-          "title": "Filter",
+          "title": "$filter",
           "type": "droplist",
           "data": [
             {
@@ -48,7 +48,7 @@
         },
         {
           "prop": "locationStr",
-          "title": "Location String",
+          "title": "$locationStr",
           "type": "droplist",
           "data": "locationList",
           "width": 250,
@@ -56,7 +56,7 @@
         },
         {
           "prop": "tagStr",
-          "title": "Tag String",
+          "title": "$tagStr",
           "type": "input",
           "width": 150,
           "hide": "data.filter.id != 'tag'"
