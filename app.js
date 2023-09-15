@@ -2,7 +2,7 @@ const util = require('util');
 
 const { OPCUAServer, Variant, DataType, StatusCodes } = require('node-opcua');
 
-module.exports = async function(plugin) {
+module.exports = async function (plugin) {
   const params = plugin.params;
   const locations = await plugin.places.get();
   const placesObj = {};
@@ -22,6 +22,7 @@ module.exports = async function(plugin) {
   };
 
   const server = new OPCUAServer({
+    allowAnonymous: params.use_password == 1 ? 0 : 1,
     userManager: params.use_password == 1 ? userManager : {},
     port: parseInt(params.port) || 4334, // the port of the listening socket of the server
     resourcePath: params.sourcepath || '/UA/IntraServer', // this path will be added to the endpoint resource name
@@ -32,6 +33,31 @@ module.exports = async function(plugin) {
     }
   });
   await server.initialize();
+
+  /*
+  const certificateFolder = path.join(process.cwd(), "certificates");
+
+  const certificateFile = path.join(certificateFolder, "server_certificate.pem");
+
+  const certificateManager = new opcua.OPCUACertificateManager({
+   rootFolder: certificateFolder,
+  });
+  await certificateManager.initialize();
+
+  if (!fs.existsSync(certificateFile)) {
+   await certificateManager.createSelfSignedCertificate({
+       subject: "/CN=MyCommonName;/L=Paris",
+       startDate: new Date(),
+       dns: [],
+       validity: 365 * 5, // five year
+       applicationUri: "Put you application URI here ",
+       outputFile: certificateFile,
+   });
+}
+const privateKeyFile = certificateManager.privateKey;
+console.log("certificateFile =", certificateFile);
+console.log("privateKeyFile =", privateKeyFile);
+  */
   const addressSpace = server.engine.addressSpace;
   const namespace = addressSpace.getOwnNamespace();
   const objectsFolder = addressSpace.rootFolder.objects;
@@ -198,7 +224,7 @@ module.exports = async function(plugin) {
             browseName: property + '()' + ' (' + item.dn + ')',
             description: item.props[property].name
           });
-          method.bindMethod(callback => {
+          method.bindMethod((inputArguments, context, callback) => {
             plugin.send({ type: 'command', command: 'device', did: item._id, prop: property });
             const callMethodResult = {
               statusCode: StatusCodes.Good
