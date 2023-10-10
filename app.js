@@ -196,21 +196,22 @@ console.log("privateKeyFile =", privateKeyFile);
                       : filter.devices[item._id + '.' + property].value
                 }),
               set: variant => {
+                let val;
                 if (variant.dataType == 1) {
-                  filter.devices[item._id + '.' + property].value = variant.value == true ? 1 : 0;
+                  val = variant.value == true ? 1 : 0;
                 }
                 if (variant.dataType == 11) {
-                  filter.devices[item._id + '.' + property].value = parseFloat(variant.value);
+                  val = parseFloat(variant.value);
                 }
                 if (variant.dataType == 12) {
-                  filter.devices[item._id + '.' + property].value = String(variant.value);
+                  val = String(variant.value);
                 }
                 plugin.send({
                   type: 'command',
                   command: 'setval',
                   did: item._id,
                   prop: property,
-                  value: filter.devices[item._id + '.' + property].value
+                  value: val
                 });
                 return StatusCodes.Good;
               }
