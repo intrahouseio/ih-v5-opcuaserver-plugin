@@ -1,6 +1,6 @@
 const util = require('util');
 
-const { OPCUAServer, Variant, DataType, StatusCodes } = require('node-opcua');
+const { OPCUAServer, Variant, DataType, StatusCodes, DataValue } = require('node-opcua');
 
 module.exports = async function (plugin) {
   const params = plugin.params;
@@ -11,6 +11,7 @@ module.exports = async function (plugin) {
   });
 
   let extraChannels = await plugin.extra.get();
+
   let filter = await filterExtraChannels(extraChannels);
   const userManager = {
     isValidUser(userName, password) {
@@ -180,21 +181,32 @@ console.log("privateKeyFile =", privateKeyFile);
             dataType.s = 'Boolean';
             dataType.obj = DataType.Boolean;
           }
+          
           namespace.addVariable({
             componentOf: device,
             nodeId: 's=' + nodeName + '|' + item.dn + '.' + property,
-            browseName: property + ' (' + item.dn + ')',
+            browseName: property + ' (' + item.dn + ')',   
             dataType: dataType.s,
             description: item.props[property].name,
             value: {
-              get: () =>
-                new Variant({
-                  dataType: dataType.obj,
-                  value:
-                    dataType.s == 'Boolean'
-                      ? filter.devices[item._id + '.' + property].value == 1
-                      : filter.devices[item._id + '.' + property].value
-                }),
+              timestamped_get: function () {
+                let dataValue = new DataValue({
+                  value:  new Variant({
+                    dataType: dataType.obj,
+                    value:
+                      dataType.s == 'Boolean'
+                        ? filter.devices[item._id + '.' + property].value == 1
+                        : filter.devices[item._id + '.' + property].value
+                  }),
+                  statusCode: filter.devices[item._id + '.' + property].chstatus,
+                  sourceTimestamp : filter.devices[item._id + '.' + property].ts,
+                  sourcePicoseconds: 0,
+                  serverTimestamp: filter.devices[item._id + '.' + property].ts,
+                  serverPicoseconds: 0                  
+                });
+                return dataValue;
+              },
+                
               set: variant => {
                 let val;
                 if (variant.dataType == 1) {
@@ -242,7 +254,21 @@ console.log("privateKeyFile =", privateKeyFile);
       //plugin.log('data' + util.inspect(data), 2);
       data.forEach(item => {
         if (filter.devices[item.did + '.' + item.prop] != undefined) {
-          filter.devices[item.did + '.' + item.prop].value = item.value;
+          if (filter.devices[item.did + '.' + item.prop].vtype == 'S') {
+            filter.devices[item.did + '.' + item.prop].value = String(item.value);
+          } else {
+            filter.devices[item.did + '.' + item.prop].value = Number(item.value);
+          }
+          if (item.chstatus > 0) {
+            filter.devices[item.did + '.' + item.prop].chstatus = StatusCodes.BadWaitingForInitialData
+          } else {
+            filter.devices[item.did + '.' + item.prop].chstatus = StatusCodes.Good
+          }
+          if (item.ts) {
+            filter.devices[item.did + '.' + item.prop].ts = item.ts;
+          } else {
+            filter.devices[item.did + '.' + item.prop].ts = Date.now();
+          }
         }
       });
     });
