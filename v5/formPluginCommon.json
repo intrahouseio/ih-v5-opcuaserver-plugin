@@ -1,7 +1,8 @@
 {
   "grid": [
-    { "id": "p1", "xs": 6, "class": "main", "table": "units" },
-    { "id": "p3", "xs": 6, "class": "main", "table": "units" },
+    { "id": "p1", "xs": 4, "class": "main", "table": "units" },
+    { "id": "p2", "xs": 4, "class": "main", "table": "units" },
+    { "id": "p3", "xs": 4, "class": "main", "table": "units" },
     { "id": "p9", "xs": 12, "class": "main", "table": "unitsTreeTable", "height": "fill" }
   ],
 
@@ -45,7 +46,20 @@
     
     
   ],
-
+  "p2": [
+    {
+      "prop": "ae",
+      "title": "OPC AE (Alarms & Events)",
+      "type": "cb",
+      "default": 0
+    },
+    {
+      "prop": "hda",
+      "title": "OPC HDA (Historical Data Access)",
+      "type": "cb",
+      "default": 0
+    }  
+  ],
   "p3": [
     {
       "prop": "restarttime",
