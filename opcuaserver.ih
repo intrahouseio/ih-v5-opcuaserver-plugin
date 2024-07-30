@@ -2,5 +2,5 @@
     "id":"opcuaserver",
     "description":"OPCUA server plugin",
     "cross":true,
-	"version":"5.1.0"
+	"version":"5.1.1"
 }

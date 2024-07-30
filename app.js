@@ -239,6 +239,7 @@ console.log("privateKeyFile =", privateKeyFile);
           item.props[property].op == 'calc' ||
           item.props[property].op == 'par' ||
           item.props[property].op == 'rw' ||
+          item.props[property].op == 'r' ||
           item.props[property].op == 'evnt'
         ) {
           let dataType = {};
