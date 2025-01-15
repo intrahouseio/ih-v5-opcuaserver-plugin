@@ -1,12 +1,30 @@
 const util = require('util');
 
-const { OPCUAServer, Variant, DataType, StatusCodes, DataValue, VariableHistorian } = require('node-opcua');
+const { OPCUAServer,
+  Variant,
+  DataType,
+  StatusCodes,
+  DataValue,
+  VariableHistorian,
+  WellKnownRoles,
+  PermissionType,
+  makePermissionFlag,
+  allPermissions,
+  makeRoles
+} = require('node-opcua');
 
 module.exports = async function (plugin) {
   const params = plugin.params;
   let startTime = Date.now();
   const locations = await plugin.places.get();
   const placesObj = {};
+
+  if (!plugin.params.password) {
+    plugin.params.password = plugin.getPassword(plugin.params, 'password');
+  }
+  if (!plugin.params.password_user) {
+    plugin.params.password_user = plugin.getPassword(plugin.params, 'password_user');
+  }
 
   locations.forEach(item => {
     placesObj[item.id] = item.title;
@@ -15,17 +33,53 @@ module.exports = async function (plugin) {
   let extraChannels = await plugin.extra.get();
   let filter = await filterExtraChannels(extraChannels);
   const userManager = {
+    getUserRoles(userName) {
+      if (params.use_password == 1) {
+        if (userName == params.userName) return makeRoles('SecurityAdmin')
+      }
+      if (params.use_password_user == 1) {
+        if (userName == params.userName_user) return makeRoles('AuthenticatedUser')
+      }
+      return makeRoles('');
+    },
     isValidUser(userName, password) {
-      if (userName === params.userName && password === params.password) {
-        return true;
+      if (params.use_password == 1) {
+        if (userName === params.userName && password === params.password) {
+          return true;
+        }
+      }
+      if (params.use_password_user == 1) {
+        if (userName === params.userName_user && password === params.password_user) {
+          return true;
+        }
       }
       return false;
     }
+
   };
 
+  const rolePermissions = [
+    {
+      roleId: WellKnownRoles.Anonymous,
+      permissions: allPermissions,
+    },
+    {
+      roleId: WellKnownRoles.AuthenticatedUser,
+      permissions: makePermissionFlag("Browse | Read | ReadHistory | ReceiveEvents")
+    },
+    {
+      roleId: WellKnownRoles.ConfigureAdmin,
+      permissions: makePermissionFlag("Browse | ReadRolePermissions | Read | ReadHistory | ReceiveEvents")
+    },
+    {
+      roleId: WellKnownRoles.SecurityAdmin,
+      permissions: allPermissions
+    },
+  ]
+
   const server = new OPCUAServer({
-    allowAnonymous: params.use_password == 1 ? 0 : 1,
-    userManager: params.use_password == 1 ? userManager : {},
+    allowAnonymous: params.use_password == 1 || params.use_password_user == 1 ? 0 : 1,
+    userManager: params.use_password == 1 || params.use_password_user == 1 ? userManager : {},
     port: parseInt(params.port) || 4334, // the port of the listening socket of the server
     resourcePath: params.sourcepath || '/UA/IntraServer', // this path will be added to the endpoint resource name
     buildInfo: {
@@ -72,12 +126,12 @@ console.log("privateKeyFile =", privateKeyFile);
       let dataValues = [];
       const start = new Date(histDetails.startTime);
       const end = new Date(histDetails.endTime);
-      const result = await plugin.get('hist', { dn_prop , start: start.getTime(), end: end.getTime() });
+      const result = await plugin.get('hist', { dn_prop, start: start.getTime(), end: end.getTime() });
       result.forEach(item => {
         const dataValue = new DataValue({
           value: new Variant({
             dataType: node.dataType.value,
-            value:item.val
+            value: item.val
           }),
           sourceTimestamp: item.ts,
           sourcePicoseconds: 0,
@@ -205,7 +259,7 @@ console.log("privateKeyFile =", privateKeyFile);
         organizedBy: node,
         nodeId: 's=' + nodeName + '|' + item.dn,
         browseName: item.dn,
-        displayName: item.name + ' (' + item.dn + ') ',
+        displayName: item.name + ' (' + item.dn + ') '
       });
       filter.devices[item._id] = device;
       if (l == varcnt) {
@@ -264,6 +318,7 @@ console.log("privateKeyFile =", privateKeyFile);
             dataType: dataType.s,
             description: item.props[property].name,
             minimumSamplingInterval: 1000,
+            rolePermissions,
             value: {
               timestamped_get: function () {
                 let dataValue = new DataValue({
@@ -284,6 +339,7 @@ console.log("privateKeyFile =", privateKeyFile);
               },
 
               set: variant => {
+                plugin.log('variant set ' + util.inspect(variant, null, 4))
                 let val;
                 if (variant.dataType == 1) {
                   val = variant.value == true ? 1 : 0;
@@ -311,7 +367,7 @@ console.log("privateKeyFile =", privateKeyFile);
             const myhist = new myHistorian(variable, {
               maxOnlineValues: 1000
             });
-            addressSpace.installHistoricalDataNode(variable, {historian :myhist});
+            addressSpace.installHistoricalDataNode(variable, { historian: myhist });
           }
 
           ////Добавление аларма для свойства устройства
@@ -363,7 +419,8 @@ console.log("privateKeyFile =", privateKeyFile);
             componentOf: device,
             nodeId: 's=' + nodeName + '|' + item.dn + '.' + property,
             browseName: property + '()' + ' (' + item.dn + ')',
-            description: item.props[property].name
+            description: item.props[property].name,
+            rolePermissions
           });
           method.bindMethod((inputArguments, context, callback) => {
             plugin.send({ type: 'command', command: 'device', did: item._id, prop: property });
@@ -435,7 +492,7 @@ console.log("privateKeyFile =", privateKeyFile);
         if (recs[index].filter == 'device') {
           const did = recs[index].did;
           //const devices = await plugin.devices.get({ did: [did] });
-          const devices = await plugin.get('devices', {did:[did]}, {alerts: params.ae ? true : false, dbsave: params.hda ? true : false});
+          const devices = await plugin.get('devices', { did: [did] }, { alerts: params.ae ? true : false, dbsave: params.hda ? true : false });
           curfilter.devicesobj.Devices = devices;
           filter.devicesobj.Devices = devices;
           devices.forEach(item => {
@@ -452,7 +509,7 @@ console.log("privateKeyFile =", privateKeyFile);
         if (recs[index].filter == 'tag') {
           const tag = recs[index].tagStr;
           //const devices = await plugin.devices.get({ tag });
-          const devices = await plugin.get('devices', {tag}, {alerts: params.ae ? true : false, dbsave: params.hda ? true : false});
+          const devices = await plugin.get('devices', { tag }, { alerts: params.ae ? true : false, dbsave: params.hda ? true : false });
           curfilter.tagobj[tag] = [];
           filter.tagobj[tag] = [];
           filter.tagobj[tag].push(...devices);
@@ -475,7 +532,7 @@ console.log("privateKeyFile =", privateKeyFile);
         if (recs[index].filter == 'location') {
           deleteLocation(recs[index].locationStr);
           //const devices = await plugin.devices.get({ location: recs[index].locationStr });
-          const devices = await plugin.get('devices', {location: recs[index].locationStr}, {alerts: params.ae ? true : false, dbsave: params.hda ? true : false});
+          const devices = await plugin.get('devices', { location: recs[index].locationStr }, { alerts: params.ae ? true : false, dbsave: params.hda ? true : false });
           devices.forEach(item => {
             deleteAlarmsEvents(item._id)
           })
@@ -489,7 +546,7 @@ console.log("privateKeyFile =", privateKeyFile);
           const tag = recs[index].tagStr;
           if (filter.folders[tag]) namespace.deleteNode(filter.folders[tag]);
           //const devices = await plugin.devices.get({ tag });
-          const devices = await plugin.get('devices', {tag}, {alerts: params.ae ? true : false, dbsave: params.hda ? true : false});
+          const devices = await plugin.get('devices', { tag }, { alerts: params.ae ? true : false, dbsave: params.hda ? true : false });
           devices.forEach(item => {
             deleteAlarmsEvents(item._id);
           })
@@ -500,7 +557,7 @@ console.log("privateKeyFile =", privateKeyFile);
         if (recs[index].filter == 'location') {
           deleteLocation(recs[index].locationStr);
           //const devices = await plugin.devices.get({ location: recs[index].locationStr });
-          const devices = await plugin.get('devices', {location: recs[index].locationStr}, {alerts: params.ae ? true : false, dbsave: params.hda ? true : false});
+          const devices = await plugin.get('devices', { location: recs[index].locationStr }, { alerts: params.ae ? true : false, dbsave: params.hda ? true : false });
           devices.forEach(item => {
             deleteAlarmsEvents(item._id)
           })
@@ -510,8 +567,8 @@ console.log("privateKeyFile =", privateKeyFile);
         if (recs[index].filter == 'device') {
           deleteAlarmsEvents(recs[index].did);
           if (filter.devices[recs[index].did] != undefined) namespace.deleteNode(filter.devices[recs[index].did]);
-         // const devices = await plugin.devices.get({ did: [recs[index].$set.did] });
-         const devices = await plugin.get('devices', {did: [recs[index].$set.did]}, {alerts: params.ae ? true : false, dbsave: params.hda ? true : false});
+          // const devices = await plugin.devices.get({ did: [recs[index].$set.did] });
+          const devices = await plugin.get('devices', { did: [recs[index].$set.did] }, { alerts: params.ae ? true : false, dbsave: params.hda ? true : false });
           curfilter.devicesobj.Devices = devices;
           filter.devicesobj.Devices = devices;
           devices.forEach(item => {
@@ -529,13 +586,13 @@ console.log("privateKeyFile =", privateKeyFile);
           let tag = recs[index].tagStr;
           if (filter.folders[tag]) namespace.deleteNode(filter.folders[tag]);
           //const devicesdel = await plugin.devices.get({ tag });
-          const devicesdel = await plugin.get('devices', {tag}, {alerts: params.ae ? true : false, dbsave: params.hda ? true : false});
+          const devicesdel = await plugin.get('devices', { tag }, { alerts: params.ae ? true : false, dbsave: params.hda ? true : false });
           devicesdel.forEach(item => {
             deleteAlarmsEvents(item._id);
           })
           tag = recs[index].$set.tagStr;
           //const devices = await plugin.devices.get({ tag });
-          const devices = await plugin.get('devices', {tag}, {alerts: params.ae ? true : false, dbsave: params.hda ? true : false});
+          const devices = await plugin.get('devices', { tag }, { alerts: params.ae ? true : false, dbsave: params.hda ? true : false });
           curfilter.tagobj[tag] = [];
           filter.tagobj[tag] = [];
           filter.tagobj[tag].push(...devices);
@@ -556,7 +613,7 @@ console.log("privateKeyFile =", privateKeyFile);
 
     async function addLocation(locationStr) {
       //const devices = await plugin.devices.get({ location: locationStr });
-      const devices = await plugin.get('devices', {location: locationStr}, {alerts: params.ae ? true : false, dbsave: params.hda ? true : false});
+      const devices = await plugin.get('devices', { location: locationStr }, { alerts: params.ae ? true : false, dbsave: params.hda ? true : false });
       const locStart = getLastPlace(locationStr);
       devices.forEach(item => {
         item.locid = locStart == item.parent ? item.parent : getTailLocation(item.location, locStart);
@@ -631,7 +688,7 @@ console.log("privateKeyFile =", privateKeyFile);
       let curdevices = [];
       if (element == 'device') {
         //const devices = await plugin.devices.get({ did: groupchannels[element].didarr });
-        const devices = await plugin.get('devices', {did:groupchannels[element].didarr}, {alerts: params.ae ? true : false, dbsave: params.hda ? true : false});
+        const devices = await plugin.get('devices', { did: groupchannels[element].didarr }, { alerts: params.ae ? true : false, dbsave: params.hda ? true : false });
         res.devicesobj.Devices = devices;
         curdevices.push(...devices);
       }
@@ -640,7 +697,7 @@ console.log("privateKeyFile =", privateKeyFile);
         for (let i = 0; i < groupchannels[element].ref.length; i++) {
           const location = groupchannels[element].ref[i].locationStr;
           //const devices = await plugin.devices.get({ location });
-          const devices = await plugin.get('devices', {location}, {alerts: params.ae ? true : false, dbsave: params.hda ? true : false});
+          const devices = await plugin.get('devices', { location }, { alerts: params.ae ? true : false, dbsave: params.hda ? true : false });
           const locStart = getLastPlace(location);
           devices.forEach(item => {
             item.locid = locStart == item.parent ? item.parent : getTailLocation(item.location, locStart);
@@ -656,7 +713,7 @@ console.log("privateKeyFile =", privateKeyFile);
         for (let i = 0; i < groupchannels[element].ref.length; i++) {
           const tag = groupchannels[element].ref[i].tagStr;
           //const devices = await plugin.devices.get({ tag });
-          const devices = await plugin.get('devices', {tag}, {alerts: params.ae ? true : false, dbsave: params.hda ? true : false});
+          const devices = await plugin.get('devices', { tag }, { alerts: params.ae ? true : false, dbsave: params.hda ? true : false });
           res.tagobj[tag] = [];
           res.tagobj[tag].push(...devices);
           curdevices.push(...devices);

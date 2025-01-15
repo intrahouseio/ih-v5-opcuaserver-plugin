@@ -1,7 +1,10 @@
 {
-    "use_password":"Use authentication",
-    "userName":"User Name",
-    "password":"Password",
+    "use_password":"Use Admin Account (Read/Write)",
+    "userName":"Admin Name",
+    "password":"Admin Password",
+    "use_password_user": "Use User Account (Read)",
+    "userName_user": "User Name",
+    "password_user": "User Password",
     "transport":"Transport",
     "port":"Port",  
     "value":"Value",

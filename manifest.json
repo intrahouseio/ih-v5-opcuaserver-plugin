@@ -5,6 +5,7 @@
   "extratab":1,
   "nochannels":1,
   "restartOnChannelsChange": 0,
+  "passwordProp":["password", "password_user"],
 
   "innerId":1,
   "hasTryStartState":0

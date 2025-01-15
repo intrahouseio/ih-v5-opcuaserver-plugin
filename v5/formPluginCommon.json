@@ -42,7 +42,28 @@
       "type": "password",
       "default": "password",
       "hide": "!data.p1.use_password"
+    },
+    {
+      "prop": "use_password_user",
+      "title": "$use_password_user",
+      "type": "cb",
+      "default": 0
+    },
+    {
+      "prop": "userName_user",
+      "title": "$userName_user",
+      "type": "input",
+      "default": "admin",
+      "hide": "!data.p1.use_password_user"
+    },
+    {
+      "prop": "password_user",
+      "title": "$password_user",
+      "type": "password",
+      "default": "password",
+      "hide": "!data.p1.use_password_user"
     }
+    
     
     
   ],
@@ -68,7 +89,7 @@
       "default": 5
     },
     { "prop": "loglevel", "title": "$LogLevel", "type": "droplist", "data": "loglevelList" },
-    { "prop": "restartOnSchedule", "title": "$restartOnSchedule", "type": "cb" },
+    { "prop": "restartOnSchedule", "title": "$restartOnSchedule", "type": "cb", "hide": "1==1" },
    
     {
       "prop": "par2_OnSchedule",
