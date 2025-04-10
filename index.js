@@ -8,9 +8,7 @@ const opcua_server = require("./app");
     const opt = getOptFromArgs();
     const pluginapi = opt && opt.pluginapi ? opt.pluginapi : 'ih-plugin-api';
     plugin = require(pluginapi + '/index.js')();
-    if (opt.version < '5.17.82') {
-      plugin.exit(17, 'Для работы плагина требуется версия системы не ниже 5.17.82!');
-    } else {
+
       plugin.log("OPCUA server plugin has started.", 1);
       plugin.params = await plugin.params.get();
       plugin.log('Received params ' + util.inspect(plugin.params));
@@ -23,7 +21,6 @@ const opcua_server = require("./app");
         plugin.log('Empty extra channels list!', 1);
         process.exit(2);
       }
-    }
 
     await opcua_server(plugin);
   } catch (err) {

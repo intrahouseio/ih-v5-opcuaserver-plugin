@@ -19,10 +19,10 @@ module.exports = async function (plugin) {
   const locations = await plugin.places.get();
   const placesObj = {};
 
-  if (!plugin.params.password) {
+  if (plugin.params.use_password && !plugin.params.password) {
     plugin.params.password = plugin.getPassword(plugin.params, 'password');
   }
-  if (!plugin.params.password_user) {
+  if (plugin.params.use_password_user && !plugin.params.password_user) {
     plugin.params.password_user = plugin.getPassword(plugin.params, 'password_user');
   }
 

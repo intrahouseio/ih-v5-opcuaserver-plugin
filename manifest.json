@@ -6,7 +6,7 @@
   "nochannels":1,
   "restartOnChannelsChange": 0,
   "passwordProp":["password", "password_user"],
-
+  "server": "5.17.82",
   "innerId":1,
   "hasTryStartState":0
 
