@@ -1,5 +1,6 @@
 const util = require('util');
-
+const fs = require("fs").promises;
+const path = require("path");
 const { OPCUAServer,
   Variant,
   DataType,
@@ -7,10 +8,12 @@ const { OPCUAServer,
   DataValue,
   VariableHistorian,
   WellKnownRoles,
-  PermissionType,
   makePermissionFlag,
   allPermissions,
-  makeRoles
+  makeRoles,
+  OPCUACertificateManager,
+  MessageSecurityMode,
+  SecurityPolicy
 } = require('node-opcua');
 
 module.exports = async function (plugin) {
@@ -32,13 +35,20 @@ module.exports = async function (plugin) {
 
   let extraChannels = await plugin.extra.get();
   let filter = await filterExtraChannels(extraChannels);
+
+
+  
   const userManager = {
     getUserRoles(userName) {
+      //plugin.log("userName " + userName);
       if (params.use_password == 1) {
         if (userName == params.userName) return makeRoles('SecurityAdmin')
       }
       if (params.use_password_user == 1) {
         if (userName == params.userName_user) return makeRoles('AuthenticatedUser')
+      }
+      if (params.use_cert == 1) {
+        if (userName == params.cert_clientName) return makeRoles('SecurityAdmin')
       }
       return makeRoles('');
     },
@@ -69,7 +79,7 @@ module.exports = async function (plugin) {
     },
     {
       roleId: WellKnownRoles.ConfigureAdmin,
-      permissions: makePermissionFlag("Browse | ReadRolePermissions | Read | ReadHistory | ReceiveEvents")
+      permissions: makePermissionFlag("Browse | ReadRolePermissions | Read | ReadHistory | ReceiveEvents | Write")
     },
     {
       roleId: WellKnownRoles.SecurityAdmin,
@@ -77,11 +87,28 @@ module.exports = async function (plugin) {
     },
   ]
 
+  const serverPKIDir = path.join(__dirname, "pki");
+
+  // Проверка и создание директории PKI
+  if (!await fs.access(serverPKIDir).catch(() => false)) {
+    await fs.mkdir(serverPKIDir, { recursive: true });
+  }
+
+  const serverCM = new OPCUACertificateManager({
+    name: "ServerCertificateManager",
+    rootFolder: serverPKIDir,
+    automaticallyAcceptUnknownCertificate: params.trust_cert == 1 ? true : false // Для продакшена установить false
+  });
+  await serverCM.initialize();
+  
   const server = new OPCUAServer({
     allowAnonymous: params.use_password == 1 || params.use_password_user == 1 ? 0 : 1,
-    userManager: params.use_password == 1 || params.use_password_user == 1 ? userManager : {},
+    userManager: params.use_password == 1 || params.use_password_user == 1 || params.use_cert == 1 ? userManager : {},
     port: parseInt(params.port) || 4334, // the port of the listening socket of the server
     resourcePath: params.sourcepath || '/UA/IntraServer', // this path will be added to the endpoint resource name
+    securityPolicies: [SecurityPolicy.None, SecurityPolicy.Basic256Sha256],
+    securityModes: [MessageSecurityMode.None, MessageSecurityMode.Sign, MessageSecurityMode.SignAndEncrypt],
+    serverCertificateManager: serverCM,
     buildInfo: {
       productName: 'IntraServer',
       buildNumber: '5.0.0',
@@ -90,30 +117,36 @@ module.exports = async function (plugin) {
   });
   await server.initialize();
 
-  /*
-  const certificateFolder = path.join(process.cwd(), "certificates");
-
-  const certificateFile = path.join(certificateFolder, "server_certificate.pem");
-
-  const certificateManager = new opcua.OPCUACertificateManager({
-   rootFolder: certificateFolder,
+  server.start(() => {
+    plugin.log('Server is now listening ... ', 1);
+    plugin.log('port ' + server.endpoints[0].port, 1);
+    const endpointUrl = server.endpoints[0].endpointDescriptions()[0].endpointUrl;
+    plugin.log(' the primary server endpoint url is ' + endpointUrl, 1);
   });
-  await certificateManager.initialize();
 
-  if (!fs.existsSync(certificateFile)) {
-   await certificateManager.createSelfSignedCertificate({
-       subject: "/CN=MyCommonName;/L=Paris",
-       startDate: new Date(),
-       dns: [],
-       validity: 365 * 5, // five year
-       applicationUri: "Put you application URI here ",
-       outputFile: certificateFile,
-   });
-}
-const privateKeyFile = certificateManager.privateKey;
-console.log("certificateFile =", certificateFile);
-console.log("privateKeyFile =", privateKeyFile);
-  */
+   // Обработчики событий
+    server.on("createSession", (session) => {
+        plugin.log("🆕 Создана сессия:"+ session.sessionName || "unnamed",2);
+    });
+
+    server.on("session_activated", (session) => {
+        const token = session.userIdentityToken;
+        let user = "anonymous";
+        if (token?.userName) user = token.userName;
+        if (token?.certificateData) user = "certificate user";
+        plugin.log("✅ Активирована сессия для пользователя:"+ user,2);
+    });
+
+    server.on("session_closed", (session, reason) => {
+        plugin.log("🔚 Закрыта сессия:", reason);
+    });
+
+    server.on("session_authentication_failed", (session, reason) => {
+        plugin.error("❌ Ошибка аутентификации:"+ reason.message || reason,2);
+    });
+
+
+
 
   class myHistorian extends VariableHistorian {
     extractDataValues(historyReadRawModifiedDetails, maxNumberToExtract, isReversed, reverseDataValue, callback) {
@@ -653,13 +686,8 @@ console.log("privateKeyFile =", privateKeyFile);
     }
   });
 
-  server.start(() => {
-    plugin.log('Server is now listening ... ', 1);
-    plugin.log('port ' + server.endpoints[0].port, 1);
-    const endpointUrl = server.endpoints[0].endpointDescriptions()[0].endpointUrl;
-    plugin.log(' the primary server endpoint url is ' + endpointUrl, 1);
-  });
-  // set the server to answer for modbus requests
+  
+
 
   process.on('exit', terminate);
   process.on('SIGTERM', () => {

@@ -1,11 +1,14 @@
 {
-  "name": "modbusserver",
-  "version": "0.4.5",
-  "description": "Modbus Server plugin for IH",
+  "name": "opcuaserver",
+  "version": "0.0.5",
+  "description": "OPCUA Server plugin",
   "main": "modbusserver.js",
   "author": "INTRA",
   "license": "MIT",
   "dependencies": {
     "node-opcua": "^2.113.0"
+  },
+  "devDependencies": {
+    "node-opcua-pki": "^5.5.0"
   }
 }

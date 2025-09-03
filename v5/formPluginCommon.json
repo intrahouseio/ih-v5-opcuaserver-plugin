@@ -62,12 +62,32 @@
       "type": "password",
       "default": "password",
       "hide": "!data.p1.use_password_user"
+    },    
+    {
+      "prop": "trust_cert",
+      "title": "$trust_cert",
+      "type": "cb",
+      "default": 0
+    },
+    {
+      "prop": "use_cert",
+      "title": "$use_cert",
+      "type": "cb",
+      "default": 0
+    },
+    {
+      "prop": "cert_clientName",
+      "title": "$cert_clientName",
+      "type": "input",
+      "default": "OPCUA-Client",
+      "hide": "!data.p1.use_cert"
     }
     
     
     
   ],
   "p2": [
+    
     {
       "prop": "ae",
       "title": "OPC AE (Alarms & Events)",
