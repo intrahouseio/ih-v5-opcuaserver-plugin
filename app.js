@@ -15,6 +15,8 @@ const { OPCUAServer,
   MessageSecurityMode,
   SecurityPolicy
 } = require('node-opcua');
+const os = require("os");
+
 
 module.exports = async function (plugin) {
   const params = plugin.params;
@@ -37,7 +39,7 @@ module.exports = async function (plugin) {
   let filter = await filterExtraChannels(extraChannels);
 
 
-  
+
   const userManager = {
     getUserRoles(userName) {
       //plugin.log("userName " + userName);
@@ -87,8 +89,22 @@ module.exports = async function (plugin) {
     },
   ]
 
-  const serverPKIDir = path.join(__dirname, "pki");
+  function getIpAddresses() {
+    const interfaces = os.networkInterfaces();
+    const ips = [];
+    for (let iface of Object.values(interfaces)) {
+      for (let alias of iface) {
+        if (alias.family === "IPv4" && !alias.internal) {
+          ips.push(alias.address);
+        }
+      }
+    }
 
+    return ips;
+  }
+
+  const serverPKIDir = path.join(__dirname, "pki");
+  const certificateFile = path.join(serverPKIDir, "own/certs/certificate.pem");
   // Проверка и создание директории PKI
   if (!await fs.access(serverPKIDir).catch(() => false)) {
     await fs.mkdir(serverPKIDir, { recursive: true });
@@ -100,7 +116,24 @@ module.exports = async function (plugin) {
     automaticallyAcceptUnknownCertificate: params.trust_cert == 1 ? true : false // Для продакшена установить false
   });
   await serverCM.initialize();
-  
+  const hostname = os.hostname();
+  const ipAddresses = getIpAddresses();
+  const certFileRequest = {
+    applicationUri: `urn:${hostname}:NodeOPCUA-Server`,
+    dns: [hostname],
+    ip: ipAddresses, // Используем массив IP-адресов
+    outputFile: certificateFile,
+    subject: {
+      commonName: "IntraOPC",
+      organization: "Intra",
+      country: "RU",
+      locality: "Cheboksary"
+    },
+    startDate: new Date(Date.now()),
+    validity: 360,
+  };
+  await serverCM.createSelfSignedCertificate(certFileRequest);
+
   const server = new OPCUAServer({
     allowAnonymous: params.use_password == 1 || params.use_password_user == 1 ? 0 : 1,
     userManager: params.use_password == 1 || params.use_password_user == 1 || params.use_cert == 1 ? userManager : {},
@@ -112,7 +145,7 @@ module.exports = async function (plugin) {
     buildInfo: {
       productName: 'IntraServer',
       buildNumber: '5.0.0',
-      buildDate: new Date(2023, 6, 29)
+      buildDate: new Date(2025, 8, 29)
     }
   });
   await server.initialize();
@@ -124,26 +157,26 @@ module.exports = async function (plugin) {
     plugin.log(' the primary server endpoint url is ' + endpointUrl, 1);
   });
 
-   // Обработчики событий
-    server.on("createSession", (session) => {
-        plugin.log("🆕 Создана сессия:"+ session.sessionName || "unnamed",2);
-    });
+  // Обработчики событий
+  server.on("createSession", (session) => {
+    plugin.log("🆕 Создана сессия:" + session.sessionName || "unnamed", 2);
+  });
 
-    server.on("session_activated", (session) => {
-        const token = session.userIdentityToken;
-        let user = "anonymous";
-        if (token?.userName) user = token.userName;
-        if (token?.certificateData) user = "certificate user";
-        plugin.log("✅ Активирована сессия для пользователя:"+ user,2);
-    });
+  server.on("session_activated", (session) => {
+    const token = session.userIdentityToken;
+    let user = "anonymous";
+    if (token?.userName) user = token.userName;
+    if (token?.certificateData) user = "certificate user";
+    plugin.log("✅ Активирована сессия для пользователя:" + user, 2);
+  });
 
-    server.on("session_closed", (session, reason) => {
-        plugin.log("🔚 Закрыта сессия:", reason);
-    });
+  server.on("session_closed", (session, reason) => {
+    plugin.log("🔚 Закрыта сессия:", reason);
+  });
 
-    server.on("session_authentication_failed", (session, reason) => {
-        plugin.error("❌ Ошибка аутентификации:"+ reason.message || reason,2);
-    });
+  server.on("session_authentication_failed", (session, reason) => {
+    plugin.error("❌ Ошибка аутентификации:" + reason.message || reason, 2);
+  });
 
 
 
@@ -686,7 +719,7 @@ module.exports = async function (plugin) {
     }
   });
 
-  
+
 
 
   process.on('exit', terminate);
