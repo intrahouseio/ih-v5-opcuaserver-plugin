@@ -109,30 +109,33 @@ module.exports = async function (plugin) {
   if (!await fs.access(serverPKIDir).catch(() => false)) {
     await fs.mkdir(serverPKIDir, { recursive: true });
   }
-
+  const certExists = await fs.access(certificateFile).then(() => true).catch(() => false);
   const serverCM = new OPCUACertificateManager({
     name: "ServerCertificateManager",
     rootFolder: serverPKIDir,
     automaticallyAcceptUnknownCertificate: params.trust_cert == 1 ? true : false // Для продакшена установить false
   });
+
   await serverCM.initialize();
-  const hostname = os.hostname();
-  const ipAddresses = getIpAddresses();
-  const certFileRequest = {
-    applicationUri: `urn:${hostname}:NodeOPCUA-Server`,
-    dns: [hostname],
-    ip: ipAddresses, // Используем массив IP-адресов
-    outputFile: certificateFile,
-    subject: {
-      commonName: "IntraOPC",
-      organization: "Intra",
-      country: "RU",
-      locality: "Cheboksary"
-    },
-    startDate: new Date(Date.now()),
-    validity: 360,
-  };
-  await serverCM.createSelfSignedCertificate(certFileRequest);
+  if (!certExists) {
+    const hostname = os.hostname();
+    const ipAddresses = getIpAddresses();
+    const certFileRequest = {
+      applicationUri: `urn:${hostname}:NodeOPCUA-Server`,
+      dns: [hostname],
+      ip: ipAddresses, // Используем массив IP-адресов
+      outputFile: certificateFile,
+      subject: {
+        commonName: "IntraOPC",
+        organization: "Intra",
+        country: "RU",
+        locality: "Cheboksary"
+      },
+      startDate: new Date(Date.now()),
+      validity: 360,
+    };
+    await serverCM.createSelfSignedCertificate(certFileRequest);
+  }
 
   const server = new OPCUAServer({
     allowAnonymous: params.use_password == 1 || params.use_password_user == 1 ? 0 : 1,
