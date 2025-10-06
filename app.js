@@ -8,7 +8,7 @@ const certmanager = require('./lib/certmanager');
 
 const { OPCUAServer, makeRoles, MessageSecurityMode, SecurityPolicy } = require('node-opcua');
 
-module.exports = async function(plugin) {
+module.exports = async function (plugin) {
   const params = plugin.params;
   if (plugin.params.use_password && !plugin.params.password) {
     plugin.params.password = plugin.getPassword(plugin.params, 'password');
@@ -28,7 +28,7 @@ module.exports = async function(plugin) {
       if (params.use_cert == 1) {
         if (userName == params.cert_clientName) return makeRoles('SecurityAdmin');
       }
-      return makeRoles('');
+      return makeRoles('AuthenticatedUser');
     },
 
     isValidUser(userName, password) {
@@ -46,7 +46,7 @@ module.exports = async function(plugin) {
     }
   };
 
-  const serverCM = await certmanager.start(plugin, plugin.opt.pluginbasepath || __dirname);
+  const serverCM = await certmanager.start(plugin, plugin.opt.pluginbasepath + "/" + plugin.opt.id || __dirname);
 
   const server = new OPCUAServer({
     allowAnonymous: params.use_password == 1 || params.use_password_user == 1 ? 0 : 1,
@@ -89,10 +89,24 @@ module.exports = async function(plugin) {
   });
 
   server.on('session_authentication_failed', (session, reason) => {
-    plugin.error('❌ Ошибка аутентификации:' + reason.message || reason, 2);
+    plugin.log('❌ Ошибка аутентификации:' + reason.message || reason, 2);
   });
 
   nodeengine(plugin, server.engine.addressSpace);
+
+ plugin.onCommand(async message => {
+    //plugin.log('Get command ' + util.inspect(message), 1);
+    if (message.param == 'gencert') {
+      try {
+        plugin.log('🔄 Generating new certificate...', 1);
+        await certmanager.createCertFromManager(serverCM,  plugin.opt.pluginbasepath + "/" + plugin.opt.id || __dirname);
+        plugin.log('✅ New certificate generated successfully.', 1);
+        process.exit(0);
+      } catch (err) {
+        plugin.log('❌ Error generating certificate: ' + err.message, 1);
+      }
+    }
+  });
 
   process.on('SIGTERM', () => {
     process.exit(0);

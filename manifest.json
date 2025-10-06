@@ -8,6 +8,16 @@
   "passwordProp":["password", "password_user"],
   "server": "5.18.31",
   "innerId":1,
-  "hasTryStartState":0
+  "hasTryStartState":0,
+
+  "plugin_popup": [
+    {
+      "id": "1001",  
+      "type": "item", 
+      "title": "Генерировать новый сертификат", 
+      "command": "send", 
+      "param": {"emit": "plugin_command:gencert"} 
+    }
+  ]
 
 }
