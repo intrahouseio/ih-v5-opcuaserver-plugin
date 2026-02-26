@@ -38,5 +38,6 @@
   "sourcePath": "Исходный путь",
   "filter": "Фильтр",
   "tagStr": "Название Метки",
-  "locationStr": "Название Пути"
+  "locationStr": "Название Пути",
+  "minSamplingInterval": "Минимальный интервал опроса сервера, мс"
 }

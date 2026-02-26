@@ -60,6 +60,13 @@
           "type": "input",
           "width": 150,
           "hide": "data.filter.id != 'tag'"
+        },
+         {
+          "prop": "minSamplingInterval",
+          "title": "$minSamplingInterval",
+          "type": "number",
+          "width": 50,
+          "default": 1000
         }
       ]
     }

@@ -38,5 +38,6 @@
     "sourcePath": "Source path",
     "filter": "Filter",
     "tagStr": "Tag String",
-    "locationStr" : "Location String"
+    "locationStr" : "Location String",
+    "minSamplingInterval": "Minimum Sampling Interval, ms"
 }
