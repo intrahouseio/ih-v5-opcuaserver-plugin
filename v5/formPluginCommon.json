@@ -99,7 +99,20 @@
       "title": "OPC HDA (Historical Data Access)",
       "type": "cb",
       "default": 0
-    }  
+    },
+    {
+      "type": "button",
+      "prop": "gencert",
+      "title": "Сгенерировать сертификат сервера",
+      "command": "plugin_command",
+      "param": "gencert"
+    },
+    {
+      "prop": "certExpDate",
+      "title": "Дата окончания действия сертификата",
+      "type": "text",
+      "default": 0
+    }
   ],
   "p3": [
     {

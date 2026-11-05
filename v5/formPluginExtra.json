@@ -34,7 +34,12 @@
             {
               "id": "tag",
               "title": "Tag"
+            },
+            {
+              "id": "unitex",    
+              "title": "Plugin unit" 
             }
+            
           ],
           "default": "device"
         },
@@ -60,6 +65,14 @@
           "type": "input",
           "width": 150,
           "hide": "data.filter.id != 'tag'"
+        },
+        { 
+          "prop": "unitex", 
+          "title": "Экземпляр плагина",   
+          "type": "droplist", 
+          "data": "unitList", 
+          "width": 250,"hide": 
+          "data.filter.id != 'unitex'"
         },
          {
           "prop": "minSamplingInterval",

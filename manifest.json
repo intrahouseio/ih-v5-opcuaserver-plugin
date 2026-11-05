@@ -18,6 +18,8 @@
       "command": "send", 
       "param": {"emit": "plugin_command:gencert"} 
     }
-  ]
+  ],
+  "ext": [{ "prop": "certExpDate", "note": "Certificate Expiration Date", "vtype": "S" }
+        ]
 
 }
